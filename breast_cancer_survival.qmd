@@ -1,0 +1,710 @@
+---
+title: "Breast Cancer Survival in the Rotterdam Tumor Bank"
+subtitle: "Prognostic Factors, Treatment Selection, and Survival Outcomes"
+author:
+  - name: Rabbi Tweneboah
+  
+output-file: index.html
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-tools: true
+    code-summary: "Show code"
+    theme: cosmo
+    embed-resources: true
+    fig-width: 9
+    fig-height: 6
+execute:
+  echo: true
+  warning: false
+  message: false
+editor: source
+---
+
+# Introduction
+
+Breast-cancer survival analyses based on observational clinical data require careful attention to both prognosis and treatment selection. Patients who receive chemotherapy may differ systematically from those who do not with respect to underlying demographic characteristics (including age), tumour burden, receptor status, and other characteristics that are also associated with survival. A crude comparison of survival between treatment groups can therefore reflect differences in baseline risk as well as treatment-related differences.
+
+This project uses the Rotterdam Tumor Bank data available in the `survival` R package to study overall survival among women with primary breast cancer. The analysis is developed in stages. This first stage characterizes the study population, assesses data quality, describes treatment patterns, and evaluates baseline covariate balance between women who received chemotherapy and those who did not. These results establish the empirical foundation for subsequent survival modelling.
+
+The primary exposure is **chemotherapy**, and the primary outcome for the full project is **overall survival**, defined by time to death or censoring. Recurrence outcomes are retained for possible secondary analyses but are not treated as baseline adjustment variables.
+
+```{r}
+#| label: setup
+#| include: false
+#| warning: false
+
+# Install required packages for the project
+
+required_packages <- c(
+  "survival",
+  "data.table",
+  "ggplot2",
+  "gt",
+  "scales",
+  "tableone",
+  "here"
+)
+
+missing_packages <- required_packages[
+  !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
+]
+
+if (length(missing_packages) > 0) {
+  stop(
+    "Install the following packages before rendering: ",
+    paste(missing_packages, collapse = ", ")
+  )
+}
+
+#load packages
+library(survival)
+library(data.table)
+library(ggplot2)
+library(gt)
+library(scales)
+library(here)
+
+# setting parameter file
+source(
+  here(
+    "parameters",
+    "directories.R"
+  )
+)
+
+theme_set(theme_minimal(base_size = 12))
+
+data("rotterdam", package = "survival") # load the data
+
+dt <- as.data.table(copy(rotterdam))
+```
+
+# Study population and variable roles
+
+The Rotterdam data contain one patient-level record for each woman and include baseline demographic characteristics, tumour characteristics, treatment indicators, recurrence follow-up, and mortality follow-up.
+
+```{r}
+#| label: variable-dictionary
+#| echo: false
+
+# Add a variable dictionary
+variable_dictionary <- data.table(
+  Variable = c(
+    "pid", "year", "age", "meno", "size", "grade", "nodes",
+    "pgr", "er", "hormon", "chemo", "rtime", "recur", "dtime", "death"
+  ),
+  Description = c(
+    "Patient identifier",
+    "Year of cancer incidence",
+    "Age at incidence",
+    "Menopausal status",
+    "Tumour size category",
+    "Tumour grade",
+    "Number of positive lymph nodes",
+    "Progesterone receptor level (fmol/L)",
+    "Estrogen receptor level (fmol/L)",
+    "Hormonal treatment",
+    "Chemotherapy",
+    "Days to recurrence or last follow-up",
+    "Recurrence indicator",
+    "Days to death or last follow-up",
+    "Death indicator"
+  ),
+  `Analytical role` = c(
+    "Identifier",
+    "Baseline covariate",
+    "Baseline covariate",
+    "Baseline covariate",
+    "Baseline covariate",
+    "Baseline covariate",
+    "Baseline covariate",
+    "Baseline covariate",
+    "Baseline covariate",
+    "Co-treatment / sensitivity variable",
+    "Primary exposure",
+    "Secondary outcome time",
+    "Secondary event indicator",
+    "Primary outcome time",
+    "Primary event indicator"
+  )
+)
+
+gt(variable_dictionary) |>
+  tab_header(
+    title = "Variable dictionary",
+    subtitle = "Rotterdam Tumor Bank cohort"
+  ) |>
+  cols_width(
+    Variable ~ px(90),
+    Description ~ px(330),
+    `Analytical role` ~ px(260)
+  )
+
+rm(variable_dictionary)
+```
+
+For the chemotherapy–overall-survival analysis, recurrence variables are treated as **post-baseline outcomes**, not as baseline confounders. Hormonal therapy is considered separately because it is a co-treatment rather than a pretreatment patient characteristic.
+
+# Data preparation and quality
+
+## Variable recoding
+
+The raw variables are preserved, while labelled factors and year-scale follow-up variables are created for analysis and presentation.
+
+```{r}
+#| label: data-preparation
+
+# year-scale follow-up transformation for easy interpretation
+dt[, dtime_yrs := dtime / 365.25]
+dt[, rtime_yrs := rtime / 365.25]
+
+# Labeling factor vars
+dt[, chemo_f := factor(
+  chemo,
+  levels = c(0, 1),
+  labels = c("No chemotherapy", "Chemotherapy")
+)]
+
+dt[, meno_f := factor(
+  meno,
+  levels = c(0, 1),
+  labels = c("Premenopausal", "Postmenopausal")
+)]
+
+dt[, grade_f := factor(
+  grade,
+  levels = c(2, 3),
+  labels = c("Grade 2", "Grade 3")
+)] # note: For this study, the available grades are either 2 or 3.
+
+dt[, hormon_f := factor(
+  hormon,
+  levels = c(0, 1),
+  labels = c("No hormonal therapy", "Hormonal therapy")
+)]
+
+dt[, size_f := factor(
+  size,
+  levels = c("<=20", "20-50", ">50"),
+  labels = c("≤20 mm", "20–50 mm", ">50 mm")
+)]
+
+```
+
+## Data-quality checks
+
+The cohort is checked for duplicated patient identifiers, missing values, invalid event indicators, and non-positive follow-up times.
+
+```{r}
+#| label: data-quality
+#| echo: false
+
+missing_by_variable <- dt[
+  ,
+  lapply(.SD, function(x) sum(is.na(x)))
+]
+
+quality_summary <- data.table(
+  Check = c(
+    "Patient records",
+    "Unique patient identifiers",
+    "Duplicated patient identifiers",
+    "Total missing values",
+    "Variables with any missing values",
+    "Invalid death indicators",
+    "Invalid recurrence indicators",
+    "Non-positive mortality follow-up times",
+    "Non-positive recurrence follow-up times"
+  ),
+  Result = c(
+    nrow(dt),
+    uniqueN(dt$pid),
+    sum(duplicated(dt$pid)),
+    sum(unlist(missing_by_variable)),
+    sum(unlist(missing_by_variable) > 0),
+    sum(!dt$death %in% c(0, 1)),
+    sum(!dt$recur %in% c(0, 1)),
+    sum(dt$dtime <= 0, na.rm = TRUE),
+    sum(dt$rtime <= 0, na.rm = TRUE)
+  )
+)
+
+gt(quality_summary) |>
+  tab_header(
+    title = "Data-quality assessment"
+  ) |>
+  cols_label(
+    Check = "Diagnostic",
+    Result = "Count"
+  ) |>
+  fmt_integer(columns = Result)
+
+rm(missing_by_variable, quality_summary)
+```
+
+The dataset contains `r nrow(dt)` women and `r uniqueN(dt$pid)` unique patient identifiers. No missing observations are present across the 15 source variables; therefore, no imputation or complete-case exclusion is required for the baseline analysis.
+
+# Cohort profile
+
+```{r}
+#| label: cohort-summary
+#| echo: false
+
+cohort_summary <- data.table(
+  Measure = c(
+    "Women in cohort",
+    "Received chemotherapy",
+    "Received hormonal therapy",
+    "Deaths observed",
+    "Recurrences observed",
+    "Median age at incidence",
+    "Median observed mortality follow-up"
+  ),
+  Value = c(
+    format(nrow(dt), big.mark = ","),
+    sprintf(
+      "%s (%.1f%%)",
+      format(sum(dt$chemo == 1), big.mark = ","),
+      100 * mean(dt$chemo == 1)
+    ),
+    sprintf(
+      "%s (%.1f%%)",
+      format(sum(dt$hormon == 1), big.mark = ","),
+      100 * mean(dt$hormon == 1)
+    ),
+    sprintf(
+      "%s (%.1f%%)",
+      format(sum(dt$death == 1), big.mark = ","),
+      100 * mean(dt$death == 1)
+    ),
+    sprintf(
+      "%s (%.1f%%)",
+      format(sum(dt$recur == 1), big.mark = ","),
+      100 * mean(dt$recur == 1)
+    ),
+    sprintf("%.0f years", median(dt$age)),
+    sprintf("%.1f years", median(dt$dtime_yrs))
+  )
+)
+
+gt(cohort_summary) |>
+  tab_header(
+    title = "Cohort profile"
+  ) |>
+  cols_width(
+    Measure ~ pct(60),
+    Value ~ pct(40)
+  )
+
+
+```
+
+Chemotherapy was received by `r sum(dt$chemo == 1)` women (`r scales::percent(mean(dt$chemo == 1), accuracy = 0.1)`), while `r sum(dt$death == 1)` deaths (`r scales::percent(mean(dt$death == 1), accuracy = 0.1)`) were observed during mortality follow-up.
+
+# Baseline characteristics by chemotherapy status
+
+## Standardized mean differences
+
+Baseline balance is evaluated using standardized mean differences (SMDs). Unlike conventional hypothesis tests, SMDs emphasize the **magnitude of covariate imbalance** rather than whether a difference is statistically distinguishable from zero in a large sample. An absolute SMD of 0.10 is used as a descriptive reference point for potentially meaningful imbalance, rather than as a formal significance threshold.
+
+```{r}
+#| label: smd-calculation
+#| include: false
+
+baseline_vars <- c(
+  "age",
+  "meno_f",
+  "size_f",
+  "grade_f",
+  "nodes",
+  "pgr",
+  "er",
+  "year"
+)
+
+factor_vars <- c(
+  "meno_f",
+  "size_f",
+  "grade_f"
+)
+
+table1_smd <- tableone::CreateTableOne(
+  vars = baseline_vars,
+  strata = "chemo_f",
+  data = dt,
+  factorVars = factor_vars,
+  test = FALSE
+)
+
+smd_matrix <- tableone::ExtractSmd(table1_smd)
+
+smd_dt <- data.table(
+  variable = rownames(smd_matrix),
+  smd = as.numeric(smd_matrix[, 1])
+)
+
+smd_lookup <- setNames(smd_dt$smd, smd_dt$variable)
+```
+
+## Baseline table
+
+```{r}
+#| label: tbl-baseline
+#| echo: false
+
+# custom functions for baseline summary
+fmt_mean_sd <- function(x) {
+  sprintf("%.1f (%.1f)", mean(x, na.rm = TRUE), sd(x, na.rm = TRUE))
+}
+
+fmt_median_iqr <- function(x) {
+  q <- quantile(x, c(0.25, 0.75), na.rm = TRUE)
+  sprintf(
+    "%.1f [%.1f, %.1f]",
+    median(x, na.rm = TRUE),
+    q[[1]],
+    q[[2]]
+  )
+}
+
+fmt_n_pct <- function(x) {
+  sprintf(
+    "%s (%.1f%%)",
+    format(sum(x, na.rm = TRUE), big.mark = ","),
+    100 * mean(x, na.rm = TRUE)
+  )
+}
+
+all_dt <- dt
+no_dt <- dt[chemo == 0]
+yes_dt <- dt[chemo == 1]
+
+baseline_table <- rbindlist(
+  list(
+    data.table(
+      Characteristic = "Age, years — mean (SD)",
+      Overall = fmt_mean_sd(all_dt$age),
+      `No chemotherapy` = fmt_mean_sd(no_dt$age),
+      Chemotherapy = fmt_mean_sd(yes_dt$age),
+      SMD = unname(smd_lookup["age"])
+    ),
+    data.table(
+      Characteristic = "Postmenopausal, n (%)",
+      Overall = fmt_n_pct(all_dt$meno == 1),
+      `No chemotherapy` = fmt_n_pct(no_dt$meno == 1),
+      Chemotherapy = fmt_n_pct(yes_dt$meno == 1),
+      SMD = unname(smd_lookup["meno_f"])
+    ),
+    data.table(
+      Characteristic = "Tumour size: ≤20 mm, n (%)",
+      Overall = fmt_n_pct(all_dt$size == "<=20"),
+      `No chemotherapy` = fmt_n_pct(no_dt$size == "<=20"),
+      Chemotherapy = fmt_n_pct(yes_dt$size == "<=20"),
+      SMD = unname(smd_lookup["size_f"])
+    ),
+    data.table(
+      Characteristic = "Tumour size: 20–50 mm, n (%)",
+      Overall = fmt_n_pct(all_dt$size == "20-50"),
+      `No chemotherapy` = fmt_n_pct(no_dt$size == "20-50"),
+      Chemotherapy = fmt_n_pct(yes_dt$size == "20-50"),
+      SMD = NA_real_
+    ),
+    data.table(
+      Characteristic = "Tumour size: >50 mm, n (%)",
+      Overall = fmt_n_pct(all_dt$size == ">50"),
+      `No chemotherapy` = fmt_n_pct(no_dt$size == ">50"),
+      Chemotherapy = fmt_n_pct(yes_dt$size == ">50"),
+      SMD = NA_real_
+    ),
+    data.table(
+      Characteristic = "Grade 3 tumour, n (%)",
+      Overall = fmt_n_pct(all_dt$grade == 3),
+      `No chemotherapy` = fmt_n_pct(no_dt$grade == 3),
+      Chemotherapy = fmt_n_pct(yes_dt$grade == 3),
+      SMD = unname(smd_lookup["grade_f"])
+    ),
+    data.table(
+      Characteristic = "Positive lymph nodes — median [IQR]",
+      Overall = fmt_median_iqr(all_dt$nodes),
+      `No chemotherapy` = fmt_median_iqr(no_dt$nodes),
+      Chemotherapy = fmt_median_iqr(yes_dt$nodes),
+      SMD = unname(smd_lookup["nodes"])
+    ),
+    data.table(
+      Characteristic = "Progesterone receptor — median [IQR]",
+      Overall = fmt_median_iqr(all_dt$pgr),
+      `No chemotherapy` = fmt_median_iqr(no_dt$pgr),
+      Chemotherapy = fmt_median_iqr(yes_dt$pgr),
+      SMD = unname(smd_lookup["pgr"])
+    ),
+    data.table(
+      Characteristic = "Estrogen receptor — median [IQR]",
+      Overall = fmt_median_iqr(all_dt$er),
+      `No chemotherapy` = fmt_median_iqr(no_dt$er),
+      Chemotherapy = fmt_median_iqr(yes_dt$er),
+      SMD = unname(smd_lookup["er"])
+    ),
+    data.table(
+      Characteristic = "Year of cancer incidence — mean (SD)",
+      Overall = fmt_mean_sd(all_dt$year),
+      `No chemotherapy` = fmt_mean_sd(no_dt$year),
+      Chemotherapy = fmt_mean_sd(yes_dt$year),
+      SMD = unname(smd_lookup["year"])
+    )
+  ),
+  use.names = TRUE,
+  fill = TRUE
+)
+
+baseline_gt = gt(baseline_table) |>
+  tab_header(
+    title = "Baseline characteristics by chemotherapy status",
+    subtitle = "Values are mean (SD), median [IQR], or n (%) as indicated"
+  ) |>
+  tab_spanner(
+    label = "Treatment group",
+    columns = c(`No chemotherapy`, Chemotherapy)
+  ) |>
+  fmt_number(
+    columns = SMD,
+    decimals = 3
+  ) |>
+  sub_missing(
+    columns = SMD,
+    missing_text = ""
+  ) |>
+  cols_label(
+    Characteristic = "Characteristic",
+    Overall = "Overall",
+    SMD = "Absolute SMD"
+  ) |>
+  cols_width(
+    Characteristic ~ px(330),
+    Overall ~ px(150),
+    `No chemotherapy` ~ px(170),
+    Chemotherapy ~ px(150),
+    SMD ~ px(100)
+  ) |>
+  tab_source_note(
+    source_note = "SMD = standardized mean difference. The tumour-size SMD summarizes the factor overall and is displayed on the first tumour-size row."
+  )
+
+baseline_gt
+
+#save table
+gtsave(
+  baseline_gt,
+  filename = file.path(
+    directory$tables_stage(1),
+    "baseline-characteristics.html"
+  )
+)
+```
+
+The strongest baseline differences are observed for age, menopausal status, lymph-node involvement, estrogen-receptor levels, and tumour size. Women who received chemotherapy were substantially younger, were much less likely to be postmenopausal, and had greater lymph-node involvement. They also had somewhat larger tumours and lower estrogen-receptor levels. By contrast, tumour grade, progesterone-receptor levels, and year of cancer incidence were comparatively well balanced.
+
+These differences show that chemotherapy recipients and non-recipients are not directly comparable on several important prognostic characteristics. Subsequent survival analyses will therefore distinguish **unadjusted group differences** from covariate-adjusted estimates.
+
+# Covariate balance
+
+```{r}
+#| label: fig-balance
+#| fig-cap: "Baseline covariate imbalance by chemotherapy status"
+
+balance_labels <- c(
+  age = "Age",
+  meno_f = "Menopausal status",
+  size_f = "Tumour size",
+  grade_f = "Tumour grade",
+  nodes = "Positive lymph nodes",
+  pgr = "Progesterone receptor",
+  er = "Estrogen receptor",
+  year = "Year of cancer incidence"
+)
+
+smd_dt[, label := unname(balance_labels[variable])]
+smd_dt[, abs_smd := abs(smd)]
+
+balance_plot = ggplot(
+  smd_dt,
+  aes(
+    x = abs_smd,
+    y = reorder(label, abs_smd)
+  )
+) +
+  geom_point(size = 3, color = "#006") +
+  geom_vline(
+    xintercept = 0.10,
+    linetype = "dashed"
+  ) +
+  labs(
+    x = "Absolute standardized mean difference",
+    y = NULL,
+    subtitle = "Dashed line indicates an absolute SMD of 0.10"
+  )
+balance_plot
+
+#Save the plot
+ggsave(
+  filename = file.path(
+    directory$figures_stage(1),
+    "baseline-covariate-balance.png"
+  ),
+  plot = balance_plot,
+  width = 9,
+  height = 6,
+  dpi = 300
+)
+
+```
+
+The balance plot shows particularly large differences in age and menopausal status, followed by lymph-node involvement and estrogen-receptor levels. Age and menopausal status describe closely related aspects of patient profile and will require careful examination when specifying multivariable models.
+
+# Treatment patterns over calendar time
+
+```{r}
+#| label: fig-chemo-year
+#| fig-cap: "Chemotherapy use over calendar time"
+
+chemo_by_year <- dt[
+  ,
+  .(
+    n = .N,
+    chemo_n = sum(chemo == 1),
+    chemo_pct = mean(chemo == 1)
+  ),
+  by = year
+]
+
+setorder(chemo_by_year, year)
+
+
+chemo_year_plot <- ggplot(
+  chemo_by_year,
+  aes(x = year, y = chemo_pct)
+) +
+  geom_line(
+    aes(group = 1),
+    linewidth = 0.5,
+    colour = "black",
+    show.legend = FALSE
+  ) +
+  geom_point(
+    aes(size = n),
+    shape = 21,
+    fill = "#2C7FB8",
+    colour = "white",
+    stroke = 0.9,
+    alpha = 0.95
+  ) +
+  scale_size_area(
+    max_size = 14,
+    limits = c(0, 400), 
+    name = "Patients",
+    guide = guide_legend(
+      override.aes = list(
+        linetype = 0,
+        shape = 21,
+        fill = "#2C7FB8",
+        colour = "white",
+        stroke = 0.9
+      )
+    )
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(chemo_by_year$year), max(chemo_by_year$year), by = 2)
+  ) +
+  scale_y_continuous(
+    labels = scales::label_percent(accuracy = 1),
+    breaks = seq(0, 0.4, by = 0.1),
+    limits = c(0, 0.4)
+  ) +
+  labs(
+    x = "Year of cancer incidence",
+    y = "Patients receiving chemotherapy"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(colour = "#D9DDE3", linewidth = 0.5),
+    legend.position = "right",
+    legend.title = element_text(face = "bold")
+  )
+
+chemo_year_plot
+
+#save the plot
+ggsave(
+  filename = file.path(
+    directory$figures_stage(1),
+    "chemotherapy-calendar-time.png"
+  ),
+  plot = chemo_year_plot,
+  width = 9,
+  height = 6,
+  dpi = 300
+)
+```
+
+Chemotherapy use varied substantially across calendar years, particularly during the earlier period (1978–1987). From the late 1980s onward, use was more stable and generally increased, reaching approximately 23% by 1992–1993. The pronounced fluctuations in the earliest years should be interpreted cautiously because they are based on very small numbers of patients. The small overall standardized difference in year of cancer incidence between treatment groups indicates little imbalance in calendar year between the groups, although calendar year may still be prognostically relevant, warranting its consideration in later survival models.
+
+# Co-treatment patterns
+
+Hormonal therapy is summarized separately because it is another treatment indicator rather than an intrinsic baseline patient or tumour characteristic.
+
+```{r}
+#| label: tbl-hormonal-treatment
+#| echo: false
+
+hormone_table <- dt[
+  ,
+  .(
+    Patients = .N,
+    `Hormonal therapy, n` = sum(hormon == 1),
+    `Hormonal therapy, %` = mean(hormon == 1)
+  ),
+  by = chemo_f
+]
+
+gt(hormone_table) |>
+  tab_header(
+    title = "Hormonal therapy by chemotherapy status"
+  ) |>
+  cols_label(
+    chemo_f = "Chemotherapy status"
+  ) |>
+  fmt_integer(
+    columns = c(Patients, `Hormonal therapy, n`)
+  ) |>
+  fmt_percent(
+    columns = `Hormonal therapy, %`,
+    decimals = 1
+  )
+```
+
+Hormonal therapy was less common among women who received chemotherapy than among those who did not. Accordingly, hormonal therapy is not included in the primary assessment of baseline covariate balance. Its potential influence as a co-treatment will be examined separately in sensitivity analyses of survival.
+
+# Baseline assessment summary
+
+The Rotterdam cohort provides a complete patient-level dataset with no missing observations in the available variables. Approximately `r scales::percent(mean(dt$chemo == 1), accuracy = 0.1)` of women received chemotherapy.
+
+Baseline comparisons reveal substantial treatment-group imbalance consistent with non-random treatment allocation. Chemotherapy recipients were markedly younger and much less likely to be postmenopausal, yet they also had greater lymph-node involvement, somewhat larger tumours, and lower estrogen-receptor levels. Tumour grade, progesterone-receptor levels, and calendar year were comparatively balanced.
+
+Taken together, these findings motivate the analytical sequence to be used in the remainder of the project. Survival will first be described without adjustment using Kaplan–Meier methods. Multivariable survival models will then assess how the estimated chemotherapy–survival association changes after adjustment for measured baseline prognostic factors, with alternative modelling approaches subsequently used to examine the sensitivity of the findings to model specification and assumptions.
+
+# Reproducibility
+
+The Rotterdam data are distributed with the `survival` R package, so no external data download is required.
+
+```{r}
+#| label: session-info
+#| code-fold: true
+
+sessionInfo()
+```
