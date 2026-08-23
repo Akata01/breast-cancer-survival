@@ -192,26 +192,11 @@ cd breast-cancer-survival
 
 ### 2. Restore the R environment
 
-If `renv` is being used:
+This project uses `renv` to record package versions.
 
 ```r
 install.packages("renv")
 renv::restore()
-```
-
-Alternatively, the principal packages used in the project include:
-
-```r
-install.packages(c(
-  "survival",
-  "data.table",
-  "ggplot2",
-  "gt",
-  "scales",
-  "tableone",
-  "here",
-  "renv"
-))
 ```
 
 Quarto must also be installed.
