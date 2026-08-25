@@ -63,6 +63,10 @@ The analysis is developed as one evolving Quarto project rather than as four sep
 ### Stage 2 — Non-parametric survival analysis
 
 - overall Kaplan-Meier survival;
+- median survival;
+- 5-year and 10-year survival probabilities;
+- chemotherapy-stratified Kaplan-Meier curves; and
+- log-rank comparison.
 
 ---
 
@@ -243,4 +247,4 @@ Equivalent folders are reserved for later analytical stages. This keeps the repo
 
 **Stage 1 complete — cohort characterization and baseline treatment-selection analysis.**
 
-The next stage will focus on **Kaplan-Meier estimation**
+The next stage will focus on **Kaplan-Meier estimation, survival probabilities, and unadjusted chemotherapy-group survival comparisons**.
