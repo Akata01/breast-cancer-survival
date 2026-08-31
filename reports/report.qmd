@@ -1,4 +1,7 @@
 ---
+output-file: index.html
+
+
 format:
   html:
     theme: report.scss

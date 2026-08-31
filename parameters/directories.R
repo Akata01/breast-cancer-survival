@@ -1,5 +1,7 @@
 library(here)
 
+## Directories for assets
+
 directory <- list()
 
 # Project root
@@ -71,3 +73,16 @@ for (i in 1:4) {
     showWarnings = FALSE
   )
 }
+
+# directory for reports
+
+directory$report <- file.path(
+  directory$main_path,
+  "reports"
+  )
+
+dir.create(
+  directory$report,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
