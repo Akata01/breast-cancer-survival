@@ -158,42 +158,6 @@ A separate portfolio report in `reports/report.qmd` uses the same underlying ana
 
 ---
 
-## Stage 1 findings
-
-The baseline analysis shows substantial treatment-group imbalance.
-
-| Characteristic | Absolute SMD |
-|---|---:|
-| Age | 1.235 |
-| Menopausal status | 1.198 |
-| Positive lymph nodes | 0.415 |
-| Estrogen receptor level | 0.362 |
-| Tumour size | 0.160 |
-| Progesterone receptor level | 0.072 |
-| Year of cancer incidence | 0.012 |
-| Tumour grade | 0.002 |
-
-Women receiving chemotherapy were markedly younger and substantially less likely to be postmenopausal, but they also had greater lymph-node involvement, somewhat larger tumours, and lower estrogen-receptor levels.
-
-These differences indicate substantial baseline imbalance consistent with **non-random treatment allocation**. 
-
----
-
-## Data quality management
-
-The Stage 1 data audit identified:
-
-- **2,982 patient records**;
-- **2,982 unique patient identifiers**;
-- **0 duplicated patient identifiers**;
-- **0 missing observations** across the 15 source variables;
-- **0 invalid death or recurrence indicators**; and
-- **0 non-positive mortality or recurrence follow-up times**.
-
-No imputation or complete-case exclusion is required for the baseline analysis.
-
----
-
 ## Analytical principles
 
 This project follows an observational epidemiologic framework.
@@ -302,7 +266,19 @@ report.scss
 
 ## Output management
 
+### Project outputs
+
+- **Technical analysis:** detailed methods, diagnostics, figures, tables, and statistical interpretation  
+  https://akata01.github.io/breast-cancer-survival/
+
+- **Publication-style research report:** concise, professionally designed presentation of the main findings  
+  https://akata01.github.io/breast-cancer-survival/reports/
+
+---
+### Tables & Figures
+
 Important reusable outputs are saved separately under the relevant stage folders, for example:
+
 
 ```text
 assets/figures/stage-*/
@@ -322,7 +298,6 @@ Equivalent folders are reserved for later analytical stages. This keeps the repo
 
 ## Project status
 
-## Project status
 
 **Stage 1 complete — cohort characterization and baseline treatment-selection analysis.**
 
