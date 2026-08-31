@@ -4,9 +4,10 @@
 
 This project develops a reproducible survival-analysis workflow using the **Rotterdam Tumor Bank** breast cancer dataset distributed with the R `survival` package.
 
-The analysis focuses on overall survival among women with primary breast cancer, with particular attention to **baseline prognostic factors, treatment selection, and the observed association between chemotherapy and survival**. Because chemotherapy was not randomly assigned in this observational cohort, the project aim to distinguishes carefully between descriptive treatment-group differences, unadjusted survival comparisons, and later covariate-adjusted analyses.
+The analysis focuses on overall survival among women with primary breast cancer, with particular attention to **baseline prognostic factors, treatment selection, and the observed association between chemotherapy and survival**. Because chemotherapy was not randomly assigned in this observational cohort,the project carefully distinguishes between descriptive treatment-group differences,
+unadjusted survival comparisons, and later covariate-adjusted analyses.
 
-The project is built in **R + Quarto** and developed progressively in four analytical stages.
+The project is built in R + Quarto + HTML/SCSS and developed progressively in four analytical stages.
 
 ---
 
@@ -60,13 +61,30 @@ The analysis is developed as one evolving Quarto project rather than as four sep
 - chemotherapy use over calendar time; and
 - hormonal co-treatment patterns.
 
-### Stage 2 — Non-parametric survival analysis
+### Stage 2 — Non-parametric survival analysis ✅
 
-- overall Kaplan-Meier survival;
-- median survival;
-- 5-year and 10-year survival probabilities;
-- chemotherapy-stratified Kaplan-Meier curves; and
-- log-rank comparison.
+- potential follow-up using the reverse Kaplan–Meier estimator;
+- overall Kaplan–Meier survival;
+- median overall survival;
+- landmark survival probabilities;
+- chemotherapy-stratified Kaplan–Meier curves; and
+- log-rank comparison of unadjusted survival distributions.
+
+### Stage 3 — Multivariable survival modelling
+
+- Cox proportional-hazards modelling;
+- adjustment for measured baseline prognostic factors;
+- estimation of adjusted hazard ratios;
+- assessment of proportional-hazards assumptions; and
+- investigation of functional form and model specification.
+
+### Stage 4 — Robustness and model extensions
+
+- sensitivity analyses;
+- alternative model specifications;
+- assessment of co-treatment;
+- alternative survival estimands where appropriate; and
+- synthesis of findings across analytical approaches.
 
 ---
 
@@ -74,14 +92,23 @@ The analysis is developed as one evolving Quarto project rather than as four sep
 
 ```text
 breast_cancer_survival/
-├── breast_cancer_survival.qmd
+├── breast_cancer_survival.qmd      # Technical analytical report
 ├── breast_cancer_survival.Rproj
 ├── README.md
 ├── .gitignore
 ├── renv.lock
 │
+├── R/
+│   ├── 01_data-preparation.R       # Shared data preparation
+│   ├── 02_stage1-analysis.R        
+│   └── 03_stage2-analysis.R        
+│
 ├── parameters/
-│   └── directories.R
+│   └── directories.R               # Central path configuration
+│
+├── reports/
+│   ├── report.qmd                  # Portfolio report
+│   └── report.scss                 # Report design system
 │
 ├── assets/
 │   ├── figures/
@@ -89,7 +116,6 @@ breast_cancer_survival/
 │   │   ├── stage-2/
 │   │   ├── stage-3/
 │   │   └── stage-4/
-│   │
 │   └── tables/
 │       ├── stage-1/
 │       ├── stage-2/
@@ -118,7 +144,17 @@ directory$figures_stage(1)
 directory$tables_stage(1)
 ```
 
-Selected figures and tables that are useful outside the rendered report are exported to the appropriate stage subfolder. The Quarto document remains the primary reproducible analysis, while the `assets/` directory stores important reusable outputs for GitHub, portfolio presentation, and future reporting.
+---
+
+### Analysis architecture
+
+The project separates statistical computation from reporting and presentation.
+
+Shared analytical code is stored in the `R/` directory. Data preparation is performed in `01_data-preparation.R`, while stage-specific scripts contain the analytical codes required for each stage.
+
+The `breast_cancer_survival.qmd` document serves as the **technical analytical report**, documenting the study design, methods, diagnostics, results, and interpretation.
+
+A separate portfolio report in `reports/report.qmd` uses the same underlying analytical objects but presents selected findings in a more concise, reader-focused format. Its visual design is controlled through `reports/report.scss`.
 
 ---
 
@@ -162,26 +198,33 @@ No imputation or complete-case exclusion is required for the baseline analysis.
 
 This project follows an observational epidemiologic framework.
 
-The analysis separates:
+The analysis distinguishes between:
 
 1. **cohort description** — who is represented in the data;
 2. **treatment selection** — how chemotherapy groups differ at baseline;
-3.
+3. **unadjusted survival patterns** — how observed survival differs before accounting for baseline characteristics;
+4. **covariate-adjusted associations** — how the chemotherapy–survival association changes after adjustment for measured prognostic factors; and
+5. **robustness analyses** — whether substantive conclusions are sensitive to modelling choices and assumptions.
 
 ---
 
 ## Tools and skills demonstrated
 
 - R programming
-- `data.table`
-- Quarto reproducible reporting
-- `gt` publication-style tables
+- `data.table` workflows
+- survival analysis with `survival`
+- Kaplan–Meier estimation
+- reverse Kaplan–Meier estimation
+- standardized mean differences
+- observational treatment-selection assessment
 - `ggplot2` data visualization
+- `gt` publication-style tables
+- Quarto reproducible reporting
+- HTML/SCSS report design
+- modular R project architecture
 - project path management with `here`
 - reproducible environments with `renv`
-- epidemiologic cohort characterization
-- standardized mean differences
-- treatment-selection assessment
+- Git/GitHub version control
 
 ---
 
@@ -205,31 +248,65 @@ renv::restore()
 
 Quarto must also be installed.
 
-### 3. Render the analysis
+
+### 3. Analytical workflow
+
+The shared computational workflow is modularized across:
+
+`R/01_data-preparation.R`
+`R/0*_stage*-analysis.R`
+
+These scripts are sourced by the Quarto documents for both technical and portfolio reports.
+
+The project directory configuration is loaded from:
+
+```r
+source(
+  here::here(
+    "parameters",
+    "directories.R"
+  )
+)
+```
+
+### 4. Render the analysis
+
+**For the technical analysis:**
 
 ```bash
 quarto render breast_cancer_survival.qmd
 ```
 
-or open the `.qmd` file in RStudio and click **Render**.
+The rendered technical analysis is written to:
 
-The project directory configuration is loaded from:
-
-```r
-source(here::here("parameters", "directories.R"))
+```bash
+index.html
 ```
 
+**For the portfolio report:**
+
+```bash
+quarto render report.qmd
+```
+or open the `.qmd` file in RStudio and click **Render**.
+
+This document presents selected findings in a more concise research-report format.
+
+Its design is controlled through:
+```bash
+report.scss
+```
 ---
 
-## Output management
 
-The full analysis is rendered from `breast_cancer_survival.qmd`.
+
+## Output management
 
 Important reusable outputs are saved separately under the relevant stage folders, for example:
 
 ```text
-assets/figures/stage-1/
-assets/tables/stage-1/
+assets/figures/stage-*/
+assets/tables/stage-*/
 ```
 
 Equivalent folders are reserved for later analytical stages. This keeps the repository organized without treating exported figures and tables as substitutes for the reproducible Quarto workflow.
@@ -245,6 +322,10 @@ Equivalent folders are reserved for later analytical stages. This keeps the repo
 
 ## Project status
 
+## Project status
+
 **Stage 1 complete — cohort characterization and baseline treatment-selection analysis.**
 
-The next stage will focus on **Kaplan-Meier estimation, survival probabilities, and unadjusted chemotherapy-group survival comparisons**.
+**Stage 2 complete — non-parametric survival analysis.**
+
+The next stage will focus on **multivariable survival modelling**, including Cox proportional-hazards models, covariate adjustment, estimation of adjusted associations, and model diagnostics.
