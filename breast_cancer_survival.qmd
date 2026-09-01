@@ -748,7 +748,6 @@ chemo_landmark_gt <- gt(landmarks_tab) |>
     )
   )
 
-
 gtsave(
   chemo_landmark_gt,
   filename = file.path(
@@ -757,9 +756,12 @@ gtsave(
   )
 )
 
+chemo_landmark_gt
 
 ```
 
+
+It can be observed that across landmarked periods survival of primary breast cancer (overall; by chemotherapy status) declined progressively over follow-up. At year 1, estimated survival was slightly higher among women who received chemotherapy. At 5 and 10 years, the chemotherapy group had slightly lower survival, while the 15-year estimates were very similar. These absolute differences were small and statistically negligible throughout.
 
 ##  Median status by treatment status
 

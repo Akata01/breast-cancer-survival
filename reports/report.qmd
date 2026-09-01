@@ -78,12 +78,14 @@ landmark_rows_html <- paste0(
 )
 ```
 
-<!-- COVER PAGE -->
+<!-- =========================================================
+COVER PAGE
+========================================================= -->
 
 <section class="report-page cover-page">
 
 <div class="cover-band"></div> <!-- this is for the strip on the left-most corner of the cover of the report -->
-<div class="cover-accent"></div>
+<div class="cover-accent"></div> <!-- this is for the circle at the  right-most top corner of the cover of the report -->
 
 <div class="cover-inner">
 <div class="cover-kicker">Portfolio research report</div>
