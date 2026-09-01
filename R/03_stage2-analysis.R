@@ -267,10 +267,17 @@ ggsave(
 
 
 # Landmark survival estimates
-km_chemo_dt <- data.table(
-  Landmark = rep(c("1 year", "5 years", "10 years", "15 years"), 2),
-  Group = sub("^chemo_f=", "", km_chemo_summary$strata),
-  Estimate = sprintf("%.1f%%", 100 * km_chemo_summary$surv)
+times <- c(1, 5, 10, 15)
+km_chemo_summary_lm <- summary(km_chemo_fit,
+                               times = times,
+                               extend = TRUE)
+
+
+
+km_chemo_dt <- data.table::data.table(
+  Landmark = paste(km_chemo_summary_lm$time, ifelse(km_chemo_summary_lm$time == 1, "year", "years")),
+  Group = sub("^chemo_f=", "", km_chemo_summary_lm$strata),
+  Estimate = sprintf("%.1f%%", 100 * km_chemo_summary_lm$surv)
 ) |>
   dcast(Landmark ~ Group, value.var = "Estimate")
 
