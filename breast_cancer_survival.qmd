@@ -25,6 +25,15 @@ execute:
 editor: source
 ---
 
+<div class="alert alert-info" role="alert" style="margin-top: 20px;">
+  <strong>📄 Prefer the concise version?</strong>
+  View the
+  <a href="reports/" class="alert-link">
+    Portfolio research report
+  </a>
+  for a focused summary of the study, key findings, and interpretation.
+</div>
+
 # Introduction
 
 Breast-cancer survival analyses based on observational clinical data require careful attention to both prognosis and treatment selection. Patients who receive chemotherapy may differ systematically from those who do not with respect to underlying demographic characteristics (including age), tumour burden, receptor status, and other characteristics that are also associated with survival. A crude comparison of survival between treatment groups can therefore reflect differences in baseline risk as well as treatment-related differences.
@@ -763,7 +772,7 @@ chemo_landmark_gt
 
 It can be observed that across landmarked periods survival of primary breast cancer (overall; by chemotherapy status) declined progressively over follow-up. At year 1, estimated survival was slightly higher among women who received chemotherapy. At 5 and 10 years, the chemotherapy group had slightly lower survival, while the 15-year estimates were very similar. These absolute differences were small and statistically negligible throughout.
 
-##  Median status by treatment status
+##  Median survival by treatment status
 
 ```{r}
 #| label: stage2-median_chemo
@@ -845,7 +854,7 @@ gtsave(
 ```
 
 
-# Reproducibility
+## Reproducibility
 
 The Rotterdam data are distributed with the `survival` R package, so no external data download is required.
 
